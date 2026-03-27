@@ -54,6 +54,23 @@ static constexpr char kSymCtorName[] = "__sym_ctor";
 bool instrumentModule(Module &M) {
   DEBUG(errs() << "Symbolizer module instrumentation\n");
 
+  LLVMContext &C = M.getContext();
+  IntegerType *Int8Ty  = IntegerType::getInt8Ty(C);
+  IntegerType *Int32Ty = IntegerType::getInt32Ty(C);
+  
+  /* Get globals for the SHM region and the previous location. Note that
+     __afl_prev_loc is thread-local. */
+
+  GlobalVariable *AFLMapPtr = new GlobalVariable(
+      M, PointerType::get(Int8Ty, 0), false,
+      GlobalValue::ExternalLinkage, 0, "__afl_area_ptr");
+
+  GlobalVariable *AFLPrevLoc = new GlobalVariable(
+      M, Int32Ty, false, GlobalValue::ExternalLinkage, 0, "__afl_prev_loc",
+      0, GlobalVariable::GeneralDynamicTLSModel, 0, false);
+
+  llvm::appendToUsed(M, {AFLMapPtr, AFLPrevLoc});
+
   // Redirect calls to external functions to the corresponding wrappers and
   // rename internal functions.
   for (auto &function : M.functions()) {
@@ -64,8 +81,16 @@ bool instrumentModule(Module &M) {
 
   // Insert a constructor that initializes the runtime and any globals.
   Function *ctor;
+  // std::tie(ctor, std::ignore) = createSanitizerCtorAndInitFunctions(
+  //     M, kSymCtorName, "__afl_auto_init", {}, {});
+  // appendToGlobalCtors(M, ctor, 0);
+  
   std::tie(ctor, std::ignore) = createSanitizerCtorAndInitFunctions(
       M, kSymCtorName, "_sym_initialize", {}, {});
+  appendToGlobalCtors(M, ctor, 0);
+
+  std::tie(ctor, std::ignore) = createSanitizerCtorAndInitFunctions(
+      M, kSymCtorName, "__afl_auto_init", {}, {});
   appendToGlobalCtors(M, ctor, 0);
 
   return true;
@@ -186,7 +211,7 @@ bool instrumentFunction(Function &F) {
   allInstructions.clear();
   for (auto &I : instructions(F))
     allInstructions.push_back(&I);
-
+  
   Symbolizer symbolizer(*F.getParent());
   symbolizer.symbolizeFunctionArguments(F);
 
@@ -202,6 +227,69 @@ bool instrumentFunction(Function &F) {
   // DEBUG(errs() << F << '\n');
   assert(!verifyFunction(F, &errs()) &&
          "SymbolizePass produced invalid bitcode");
+  
+  // -----------------------------------------------------------------------------
+  // AFL coverage instrument
+  Module &M = (*F.getParent());
+  LLVMContext &C = M.getContext();
+  IntegerType *Int8Ty  = IntegerType::getInt8Ty(C);
+  IntegerType *Int32Ty = IntegerType::getInt32Ty(C);
+  
+  /* Get globals for the SHM region and the previous location. Note that
+     __afl_prev_loc is thread-local. */
+
+  GlobalVariable *AFLMapPtr = M.getGlobalVariable("__afl_area_ptr");
+
+  GlobalVariable *AFLPrevLoc = M.getGlobalVariable("__afl_prev_loc");
+
+  if (!AFLMapPtr || !AFLPrevLoc) {
+  errs() << "Error: Missing global variables __afl_area_ptr or __afl_prev_loc\n";
+  return false;
+}
+
+  // Reference of Global Variables for Edge-BranCond Mapping.
+  // GlobalVariable *CondJmp = M.getGlobalVariable("__cond_jmp");
+
+  // GlobalVariable *BranCond = M.getGlobalVariable("__bran_cond");
+
+  for (auto &BB : F) {
+    BasicBlock::iterator IP = BB.getFirstInsertionPt();
+    IRBuilder<> IRB(&(*IP));
+    /* Make up cur_loc */
+
+    unsigned int cur_loc = AFL_R(MAP_SIZE);
+    ConstantInt *CurLoc = ConstantInt::get(Int32Ty, cur_loc);
+
+    /* Load prev_loc */
+
+    LoadInst *PrevLoc = IRB.CreateLoad(AFLPrevLoc);
+    PrevLoc->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+    Value *PrevLocCasted = IRB.CreateZExt(PrevLoc, IRB.getInt32Ty());
+
+    /* Load SHM pointer */
+
+    LoadInst *MapPtr = IRB.CreateLoad(AFLMapPtr);
+    MapPtr->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+    Value *MapPtrIdx =
+        IRB.CreateGEP(MapPtr, IRB.CreateXor(PrevLocCasted, CurLoc));
+
+    /* Update bitmap */
+
+    LoadInst *Counter = IRB.CreateLoad(MapPtrIdx);
+    Counter->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+    Value *Incr = IRB.CreateAdd(Counter, ConstantInt::get(Int8Ty, 1));
+    IRB.CreateStore(Incr, MapPtrIdx)
+        ->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+    /* Set prev_loc to cur_loc >> 1 */
+
+    StoreInst *Store =
+        IRB.CreateStore(ConstantInt::get(Int32Ty, cur_loc >> 1), AFLPrevLoc);
+    Store->setMetadata(M.getMDKindID("nosanitize"), MDNode::get(C, None));
+
+    /* Save the branch condition to path constraint set */ 
+
+  }
 
   return true;
 }

@@ -17,6 +17,7 @@
 runtime_64bit_dir="${SYMCC_RUNTIME_DIR:-@SYMCC_RUNTIME_DIR@}"
 runtime_32bit_dir="${SYMCC_RUNTIME32_DIR:-@SYMCC_RUNTIME_32BIT_DIR@}"
 pass="${SYMCC_PASS_DIR:-@CMAKE_CURRENT_BINARY_DIR@}/libsymcc.so"
+# afl_llvm_rt="${SYMCC_PASS_DIR:-@CMAKE_CURRENT_BINARY_DIR@}/libafl-llvm-rt.a"
 compiler="${SYMCC_CLANG:-@CLANG_BINARY@}"
 
 # Find out if we're cross-compiling for a 32-bit architecture
@@ -36,7 +37,7 @@ done
 if [ $# -eq 0 ]; then
     echo "Use symcc as a drop-in replacement for clang, e.g., symcc -O2 -o foo foo.c" >&2
     exit 1
-fi
+fi                            
 
 exec "$compiler"                                \
      @CLANG_LOAD_PASS@"$pass"                   \
@@ -44,4 +45,3 @@ exec "$compiler"                                \
      -L"$runtime_dir"                           \
      -lsymcc-rt                                 \
      -Wl,-rpath,"$runtime_dir"                  \
-     -Qunused-arguments

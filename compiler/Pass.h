@@ -14,6 +14,9 @@
 
 #ifndef PASS_H
 #define PASS_H
+#define AFL_R(x) (random() % (x))
+#define MAP_SIZE_POW2       16
+#define MAP_SIZE            (1 << MAP_SIZE_POW2)
 
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/ValueMap.h>

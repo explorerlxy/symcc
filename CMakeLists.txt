@@ -75,8 +75,8 @@ if (${TARGET_32BIT})
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/runtime
     CMAKE_ARGS
     ${SYM_RUNTIME_BUILD_ARGS}
-    -DCMAKE_C_FLAGS="${CMAKE_C_FLAGS} -m32"
-    -DCMAKE_CXX_FLAGS="${CMAKE_CXX_FLAGS} -m32"
+    -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}-m32 
+    -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}-m32 
     -DZ3_DIR=${Z3_32BIT_DIR}
     -DLLVM_DIR=${LLVM_32BIT_DIR}
     INSTALL_COMMAND ""
@@ -107,6 +107,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} \
 
 # Mark nodelete to work around unload bug in upstream LLVM 5.0+
 set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,nodelete")
+
+# add_library(afl-llvm-rt STATIC compiler/afl-llvm-rt.cpp)
 
 # This is the compiler pass that we later load into clang or opt. If LLVM is
 # built without RTTI we have to disable it for our library too, otherwise we'll

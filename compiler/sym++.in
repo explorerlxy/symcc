@@ -17,6 +17,7 @@
 runtime_64bit_dir="${SYMCC_RUNTIME_DIR:-@SYMCC_RUNTIME_DIR@}"
 runtime_32bit_dir="${SYMCC_RUNTIME32_DIR:-@SYMCC_RUNTIME_32BIT_DIR@}"
 pass="${SYMCC_PASS_DIR:-@CMAKE_CURRENT_BINARY_DIR@}/libsymcc.so"
+# afl_llvm_rt="${SYMCC_PASS_DIR:-@CMAKE_CURRENT_BINARY_DIR@}/libafl-llvm-rt.a"
 libcxx_var=SYMCC_LIBCXX_PATH
 compiler="${SYMCC_CLANGPP:-@CLANGPP_BINARY@}"
 
